@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hitster 50 – QR Scanner</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background:#111; color:#eee; }
+    header { text-align:center; margin-bottom:1rem; }
+    #video { width: 100%; max-width: 520px; border-radius: 12px; background:#000; }
+    .panel { max-width: 560px; margin: 0 auto; }
+    .btn { display:inline-block; padding:.6rem 1rem; border-radius:8px; border:0; cursor:pointer; }
+    .btn-primary { background:#1DB954; color:#111; font-weight:700; }
+    .note { font-size:.9rem; color:#bbb; }
+    .error { color:#ff6b6b; margin-top:.5rem; }
+    .ok { color:#1DB954; margin-top:.5rem; }
+    .footer { margin-top:1rem; font-size:.85rem; color:#aaa; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <header>
+      <h1>Hitster 50 – QR Scanner</h1>
+      <p class="note">Richt de camera op een kaartje. We openen het nummer in Spotify.</p>
+    </header>
+
+    <video id="video" muted playsinline></video>
+    <div id="status" class="note">Scanner start...</div>
+    <div id="msg"></div>
+
+    <div class="footer">
+      <p>Tip: Gebruik QR’s met <code>https://open.spotify.com/...</code> of <code>https://spotify.link/...</code>.</p>
+    </div>
+  </div>
+
+  <!-- ZXing Browser build (QR-scanner) -->
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script>
+    (async () => {
+      const { BrowserQRCodeReader, NotFoundException } = ZXingBrowser;
+
+      const video = document.getElementById('video');
+      const statusEl = document.getElementById('status');
+      const msgEl = document.getElementById('msg');
+
+      // Alleen Spotify-domeinen toestaan
+      const isAllowedUrl = (text) => {
+        try {
+          const u = new URL(text);
+          return ['open.spotify.com','spotify.link'].includes(u.hostname);
+        } catch { return false; }
+      };
+
+      // (Optioneel) mapping per jaar als je QR's met korte codes gebruikt:
+      // const YEAR_TO_URL = {
+      //   "1984": "https://open.spotify.com/track/54X78diSLoUDI3joC2bjSZ" // Prince – Purple Rain
+      // };
+
+      const codeReader = new BrowserQRCodeReader();
+      statusEl.textContent = 'Camera toestaan a.u.b.';
+
+      try {
+        const devices = await BrowserQRCodeReader.listVideoInputDevices();
+        const deviceId = (devices.find(d => /back|rear/i.test(d.label)) || devices[0] || {}).deviceId;
+
+        await codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+          if (result) {
+            const text = result.getText().trim();
+
+            // Gebruik deze regel als je korte codes in je QR's stopt:
+            // const maybeUrl = YEAR_TO_URL[text] || text;
+
+            // Voor directe Spotify-URL's in de QR:
+            const maybeUrl = text;
+
+            if (isAllowedUrl(maybeUrl)) {
+              msgEl.innerHTML = '<div class="ok">Gevonden ✔ – openen in Spotify…</div>';
+              const go = () => window.location.href = maybeUrl;
+
+              // Probeer direct te openen en toon ook een knop (iOS vraagt vaak een tik)
+              try { go(); } catch (e) {}
+              msgEl.insertAdjacentHTML('beforeend',
+                '<p><button class="btn btn-primary" id="openBtn">Open in Spotify</button></p>');
+              document.getElementById('openBtn').onclick = go;
+
+              codeReader.reset(); // stop scannen
+            } else {
+              msgEl.innerHTML = '<div class="error">Onbekende of niet‑toegestane link.</div><pre>'+maybeUrl+'</pre>';
+            }
+          } else if (err && !(err instanceof NotFoundException)) {
+            msgEl.innerHTML = '<div class="error">Scanfout: '+(err.message||err)+'</div>';
+          }
+        });
+
+        statusEl.textContent = 'Scanner actief.';
+
+      } catch (e) {
+        statusEl.textContent = 'Kon de camera niet starten.';
+        msgEl.innerHTML = '<div class="error">'+(e.message||e)+'</div>';
+      }
+    })();
+  </script>
+</body>
+</html>
